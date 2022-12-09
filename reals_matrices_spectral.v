@@ -464,87 +464,71 @@ by exact: one_dirp_id.
 Qed.
 
 (* The first step of spectral decomposition: putting a single eigenvalue on the diagonal *)
-Lemma spec1 {n : nat} (M : 'M[R]_n.+1) : symmx M ->
+Lemma spec1 {n : nat} (M : 'M[R]_n.+1) :
+  symmx M ->
   exists (U : 'M[R]_n.+1) (M' : 'M[R]_n) (lambda : R),
-  orthmx U /\ symmx M' /\ U *m M *m U^T = block_mx (lambda%:M : 'M[R]_1) 0 0 M'.
+    [/\ orthmx U, symmx M' & U *m M *m U^T = block_mx (lambda%:M : 'M[R]_1) 0 0 M'].
 Proof.
-intros H. destruct (symmx_has_eigenvalue (ltn0Sn n) H) as [lambda Heig].
-destruct Heig as [v Heig]. destruct Heig as [vnz Heig].
-assert (vtnz : v^T != 0). {
-  destruct (v^T == 0) eqn:vtz. assert (vz : v=0). {apply trmx_inj. apply: eqP. rewrite trmx0 //. }
-  assert (vz' : v==0). {rewrite vz //. } rewrite vz' in vnz. discriminate. reflexivity. }
-destruct (vec_to_orthmx (normR_is_normal vtnz)) as [W oU].
+move=>H; case: (symmx_has_eigenvalue (isT : (0 < n.+1)%N) H)=>lam [v][vnz Heig].
+have vtnz : v^T != 0 by apply: contra_neq vnz; rewrite -trmx0; exact: trmx_inj.
+case: (vec_to_orthmx (normR_is_normal vtnz))=>W oU.
 exists (col_mx (normR v^T) W).
-assert (Heigt : v^T *m M = lambda *: v^T). {
-  rewrite H. assert (t : v^T *m M^T = (M *m v)^T). {symmetry. apply trmx_mul. }
-  rewrite t Heig. apply tr_mul. }
-assert (Heigtn : (normR v^T) *m M = lambda *: (normR v^T)). {
-  unfold normR. rewrite <- scalemxAl. rewrite Heigt. rewrite !ssmx_mul mulrC //. }
-assert (Heign : M *m (normR v^T)^T = lambda *: (normR v^T)^T). {
-  rewrite H. assert (t : M^T *m (normR v^T)^T = (normR v^T *m M)^T). {symmetry. apply trmx_mul. }
-  rewrite t Heigtn tr_mul //. }
-assert (eM : exists (M' : 'M[R]_n), (col_mx (normR v^T) W) *m M *m (col_mx (normR v^T) W)^T = block_mx (lambda%:M : 'M[R]_1) 0 0 M'). {
-  rewrite mul_col_mx tr_col_mx mul_col_row. exists (W *m M *m W^T).
-  assert (z3 : W *m (normR v^T)^T = 0). {apply (orthvecs_orth oU). }
-  assert (z2 : normR v^T *m W^T = 0). {rewrite <- (trmxK (normR v^T)). rewrite <- trmx0. rewrite <- z3. symmetry. apply trmx_mul. }
-  assert (eM1 : normR v^T *m M *m (normR v^T)^T = lambda%:M). {
-    rewrite Heigtn. rewrite <- scalemxAl. rewrite (normal_to_id (normR_is_normal vtnz)).
-    apply scalemx1. }
-  assert (eM2 : normR v^T *m M *m W^T = 0). {
-    rewrite Heigtn. rewrite <- scalemxAl. rewrite z2. rewrite scalemx_const. rewrite mulr0 //. }
-  assert (eM3 : W *m M *m (normR v^T)^T = 0). {
-    rewrite <- mulmxA. rewrite Heign. rewrite <- mul_scalar_mx.
-    rewrite mulmxA scalar_mxC. rewrite <- mulmxA. rewrite z3. rewrite mulmx0 //. }
-  rewrite eM1 eM2 eM3 //. }
-destruct eM as [M' eM]. exists M'. exists lambda. split. apply oU. split.
-- (*Proving M' is symmetric*)
-  assert (sym : symmx (block_mx (lambda%:M : 'M[R]_1) 0 0 M')). {
-    rewrite <- eM. unfold symmx. rewrite trmx_mul. rewrite trmxK. rewrite trmx_mul.
-    rewrite <- H. symmetry. apply mulmxA. }
-  unfold symmx in sym. rewrite tr_block_mx in sym. apply (eq_block_mx sym).
-apply eM.
+have Heigt : v^T *m M = lam *: v^T by rewrite H -trmx_mul Heig tr_mul.
+have Heigtn : (normR v^T) *m M = lam *: (normR v^T)
+  by rewrite /normR -scalemxAl Heigt !ssmx_mul mulrC.
+have Heign : M *m (normR v^T)^T = lam *: (normR v^T)^T
+  by rewrite H -trmx_mul Heigtn tr_mul.
+have [M' eM] : exists M' : 'M[R]_n, (col_mx (normR v^T) W) *m M *m (col_mx (normR v^T) W)^T =
+                                     block_mx (lam%:M : 'M[R]_1) 0 0 M'.
+- rewrite mul_col_mx tr_col_mx mul_col_row; exists (W *m M *m W^T).
+  have z3 : W *m (normR v^T)^T = 0 by apply: orthvecs_orth.
+  have z2 : normR v^T *m W^T = 0
+    by rewrite -(trmxK (normR v^T)) -trmx0 -z3 trmx_mul.
+  have eM1 : normR v^T *m M *m (normR v^T)^T = lam%:M
+    by rewrite Heigtn -scalemxAl (normal_to_id (normR_is_normal vtnz)) scalemx1.
+  have eM2 : normR v^T *m M *m W^T = 0
+    by rewrite Heigtn -scalemxAl z2 scalemx_const mulr0.
+  have eM3 : W *m M *m (normR v^T)^T = 0
+    by rewrite -mulmxA Heign -mul_scalar_mx mulmxA scalar_mxC -mulmxA z3 mulmx0.
+  by rewrite eM1 eM2 eM3.
+exists M', lam; split=>//.
+(*Proving M' is symmetric*)
+suff : symmx (block_mx (lam%:M : 'M[R]_1) 0 0 M')
+  by rewrite /symmx tr_block_mx; case/eq_block_mx.
+by rewrite -eM /symmx trmx_mul trmxK trmx_mul -H mulmxA.
 Qed.
-
 
 (* The spectral theorem for finite-dimensional real symmetric matrices: *)
-Theorem spec {n : nat} (M : 'M[R]_n) : symmx M ->
-  exists (U : 'M[R]_n) (D : 'M[R]_n), orthmx U /\ is_diag_mx D /\ M = U^T *m D *m U.
+Theorem spec {n : nat} (M : 'M[R]_n) :
+  symmx M ->
+  exists U D : 'M[R]_n, [/\ orthmx U, is_diag_mx D & M = U^T *m D *m U].
 Proof.
-intros H. induction n as [|n' IH].
-- (*0-dimensional case*) exists 0. exists 0. split.
-  + (* orthogonality: *) unfold orthmx. rewrite mul0mx. symmetry. apply flatmx0. split.
-  + (* diagonal: *) apply mx0_is_diag.
-  + (* product: *) rewrite !mulmx0. apply flatmx0.
-- (*inductive case:*) destruct (spec1 H) as [U H']. destruct H' as [M' H'].
-  destruct H' as [lambda H']. destruct H' as [oU H']. destruct H' as [H' mult].
-  destruct (IH M' H') as [U' IH']. destruct IH' as [D' IH']. destruct IH' as [oU' IH'].
-  destruct IH' as [IH' mult']. exists ((one_dirp U') *m U).
-  exists (block_mx (lambda%:M : 'M[R]_1) 0 0 D'). split.
-  + (* orthogonality: *) apply orthmx_prod. apply one_dirp_pres_orth. apply oU'. apply oU. split.
-  + (* diagonal: *) rewrite (is_diag_block_mx (lambda%:M : 'M[R]_1) 0 0 D').
-    rewrite IH'. rewrite scalar_mx_is_diag.
-    assert (z1 : (0 :'rV[R]_n') == 0). {by []. }
-    assert (z2 : (0 :'cV[R]_n') == 0). {by []. }
-    rewrite z1 z2 //. reflexivity.
-  + (* product: *) rewrite mulmxA. rewrite trmx_mul. rewrite one_dirp_tr.
-    assert (t :  U^T *m (one_dirp U'^T) *m (block_mx (lambda%:M : 'M[R]_1) 0 0 D')
-          = U^T *m ((one_dirp U'^T) *m (block_mx (lambda%:M : 'M[R]_1) 0 0 D'))). {
-      rewrite mulmxA //. } rewrite t.
-    assert (t' : U^T *m ((one_dirp U'^T) *m (block_mx (lambda%:M : 'M[R]_1) 0 0 D')) *m one_dirp U'
-          = U^T *m (((one_dirp U'^T) *m (block_mx (lambda%:M : 'M[R]_1) 0 0 D')) *m one_dirp U')). {
-      rewrite [in RHS]mulmxA //. } rewrite t'.
-    unfold one_dirp.
-    rewrite (block_diag_mulmx U'^T D' (1%:M : 'M[R]_1) (lambda%:M : 'M[R]_1)).
-    rewrite mul1mx.
-    rewrite (block_diag_mulmx (U'^T *m D') U' (lambda%:M : 'M[R]_1) (1%:M : 'M[R]_1)).
-    rewrite mulmx1. rewrite <- mult'.
-    assert (t'' : block_mx (lambda%:M : 'M[R]_1) 0 0 M' = U *m M *m U^T). {
-      symmetry. apply mult. } rewrite t''.
-    rewrite !mulmxA. rewrite (mulmx1C oU) mul1mx.
-    rewrite <- mulmxA. rewrite (mulmx1C oU) mulmx1 //.
+elim: n M=>[|n IH] M H.
+- (*0-dimensional case*) exists 0, 0; rewrite !flatmx0; split=>//.
+  - (* orthogonality: *)
+    by rewrite /orthmx mul0mx flatmx0.
+  (* diagonal: *)
+  by exact: mx0_is_diag.
+(*inductive case:*)
+case: (spec1 H)=>U [M'][lam][oU H' mult].
+case: (IH M' H')=>U'[D'][oU' IH' mult'].
+exists ((one_dirp U') *m U), (block_mx (lam%:M : 'M[R]_1) 0 0 D'); split.
+- (* orthogonality: *)
+  by apply: orthmx_prod=>//; apply: one_dirp_pres_orth.
+- (* diagonal: *)
+  rewrite (is_diag_block_mx (lam%:M : 'M[R]_1) 0 0 D') // !eqxx /= IH' andbT.
+  by exact: scalar_mx_is_diag.
+(* product: *)
+rewrite mulmxA trmx_mul one_dirp_tr.
+have -> :  U^T *m (one_dirp U'^T) *m (block_mx (lam%:M : 'M[R]_1) 0 0 D') =
+          U^T *m ((one_dirp U'^T) *m (block_mx (lam%:M : 'M[R]_1) 0 0 D')) by rewrite mulmxA.
+have -> : U^T *m ((one_dirp U'^T) *m (block_mx (lam%:M : 'M[R]_1) 0 0 D')) *m one_dirp U' =
+          U^T *m (((one_dirp U'^T) *m (block_mx (lam%:M : 'M[R]_1) 0 0 D')) *m one_dirp U')
+  by rewrite [in RHS]mulmxA.
+rewrite /one_dirp (block_diag_mulmx (1%:M : 'M[R]_1) (lam%:M : 'M[R]_1) U'^T D') mul1mx.
+rewrite (block_diag_mulmx (lam%:M : 'M[R]_1) (1%:M : 'M[R]_1) (U'^T *m D') U') mulmx1.
+by rewrite -mult' -mult !mulmxA (mulmx1C oU) mul1mx -mulmxA (mulmx1C oU) mulmx1.
 Qed.
-
-
 
 
 
@@ -815,7 +799,3 @@ split.
       rewrite T. rewrite <- !Ew. apply Hv'1.
     - (* The vector w *m UM is in the subspace UM. *) apply submxMl.
 Qed.
-
-
-
-
