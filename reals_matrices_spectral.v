@@ -539,8 +539,7 @@ eigenvalues of real symmetric matrices and to use it to prove the Cauchy Interla
 Lemma orthvecs_mul {m n p : nat} (M : 'M[R]_(m,n)) (N : 'M[R]_(n,p)) :
   orthvecs M -> orthvecs N -> orthvecs (M *m N).
 Proof.
-intros HM HN. unfold orthvecs. rewrite trmx_mul. rewrite <- mulmxA. rewrite (mulmxA N N^T M^T).
-rewrite HN mul1mx HM. reflexivity.
+by move=>HM HN; rewrite /orthvecs trmx_mul -mulmxA (mulmxA N) HN mul1mx HM.
 Qed.
 
 (* Since the min-max theorem and the Cauchy interlacing theorem are about the full list of
@@ -549,82 +548,58 @@ theorem to show that every symmetric matrix has such a list. *)
 
 (* A list of reals can be expressed in mathcomp as type seq R. *)
 (* The following proposition states that a list is sorted in increasing order. *)
-Fixpoint sortedreals (l : seq R) : Prop := match l with
-| nil => True
-| h :: t => (h <= head h t) /\ (sortedreals t)
-end.
+Fixpoint sortedreals (l : seq R) : Prop :=
+  if l is h :: t then (h <= head h t) /\ sortedreals t else True.
 
+Import Order.Theory.
+
+Lemma sortedreals_sorted (l : seq R) : reflect (sortedreals l) (sorted (<=%R) l).
+Proof.
+apply: (iffP idP); elim: l=>//= h t.
+- move=>IH H; split; last by apply: IH (path_sorted H).
+  by case: {IH}t H=>//= h1 t1; case/andP.
+move=>IH [H1 H2]; rewrite (path_sortedE le_trans); apply/andP; split; last by apply: IH.
+case: t H1 H2 IH=>//= h1 t1 E H IH; rewrite E /=.
+by apply/(order_path_min le_trans)/(path_le le_trans E)/IH.
+Qed.
+
+(*
 (* Since head and last need to be called with default values, the following is useful to
 interchange the default values in case the list is nonempty. *)
 Lemma head_interchange (l : seq R) (h1 h2 : R) : l != nil -> head h1 l = head h2 l.
-Proof.
-destruct l. discriminate. reflexivity.
-Qed.
+Proof. by case: l. Qed.
 
 Lemma last_interchange (l : seq R) (t1 t2 : R) : l != nil -> last t1 l = last t2 l.
-Proof.
-destruct l. discriminate. reflexivity.
-Qed.
+Proof. by case: l. Qed.
 
 (* The following lemma states that concatenations of sorted lists are sorted if the last
 element of the first list is <= the head of the second. *)
 Lemma concat_sorted (l1 l2 : seq R) :
-  (last 0 l1 <= head 0 l2) /\ (sortedreals l1) /\ (sortedreals l2) -> sortedreals (l1 ++ l2).
+  last 0 l1 <= head 0 l2 -> sortedreals l1 -> sortedreals l2 ->
+  sortedreals (l1 ++ l2).
 Proof.
-intros H. destruct H as [H S]. destruct S as [S1 S2].
-induction l1 as [| h t IH].
-- rewrite cat0s. apply S2.
-- assert (S1' : sortedreals t). { apply S1. }
-  destruct t as [| ht tt].
-  + rewrite cat1s. rewrite last_cons in H.
-    assert (H' : h <= head 0 l2). { apply H. }
-    assert (H'' : h <= head h l2). { remember l2 as t2. destruct l2.
-      - assert (Hh : head h [::] = h). { reflexivity. } rewrite Heqt2 Hh //.
-      - assert (Hnn : t2 != nil). { rewrite Heqt2 //. }
-        rewrite (head_interchange h 0 Hnn). apply H'. }
-    split. apply H''. apply S2.
-  + rewrite last_cons in H. rewrite (last_interchange h 0) in H.
-    split. destruct S1 as [hS1 S1'']. apply hS1. apply (IH H S1'). reflexivity.
+elim: l1=>//=h1 l1 IH H1 [H2 S1 S2].
+case: l1=>/=[|h11 l11] in IH H1 H2 S1 *.
+- move=>{H2 S1}; split=>//.
+  by case: l2 S2 IH H1.
+by split=>//; apply: IH.
 Qed.
 
 (* Note that 'prefix l1 l2' means l1 is a list that appears as the beginning of list l2.
 The following lemma will show that if the larger list l2 is sorted, so is the smaller list l1. *)
 Lemma prefix_sorted (l1 l2 : seq R) : prefix l1 l2 -> sortedreals l2 -> sortedreals l1.
 Proof.
-generalize l2 as l. induction l1 as [|h t IH].
-- (*l1 empty*) intros l H S. reflexivity.
-- (*l1 = h::t*) intros l H S. destruct l as [| h' l].
-  + (*l2 empty*) discriminate.
-  + (*l2 = h'::l*) rewrite prefix_cons in H.
-    assert (H' : (h==h') /\ prefix t l). {apply (andP H). }
-    destruct H' as [H1 H2].
-    assert (H1' : h=h'). {apply (eqP H1). }
-    rewrite <- H1' in S. destruct S as [S1 S2].
-    split.
-    - (*Showing h <= head h t. Need to separately consider when t is empty.*)
-      destruct t as [| h'' t]. by [].
-      destruct l as [| h''' l]. discriminate.
-      rewrite prefix_cons in H2.
-      assert (H2' : (h''==h''') /\ prefix t l). {apply (andP H2). }
-      destruct H2' as [H21 H22].
-      assert (H21' : h''=h'''). {apply (eqP H21). }
-      rewrite <- H21' in S1. apply S1.
-    - (*t is sorted inductively*) apply (IH l H2 S2).
-Qed.
-
-(*We digress to prove this basic, useful lemma.*)
-Lemma le_l (x y : R) : x < y -> x <= y.
-Proof.
-intros L.
-assert (L' : 0 < y - x). { rewrite subr_gt0 //. }
-rewrite lt0r in L'. assert (L'' : y - x !=0 /\ 0 <= y-x). {apply (andP L'). }
-destruct L'' as [_ L'']. rewrite subr_ge0 in L''. apply L''.
+elim: l1 l2=>//= h1 l1 IH [|h2 l2] //= /andP [/eqP {h1}-> Hp][H S].
+split; last by apply: (IH l2).
+by case: l2 H Hp S=>/=; case: {IH}l1=>//= h22 l22 h11 l11 H /andP [/eqP ->].
 Qed.
 
 (*We can insert any value into a sorted list:*)
-Lemma insert_into_sorted (r : R) (l : seq R) : sortedreals l ->
-  exists (l1 l2 : seq R), (l = l1 ++ l2 /\ sortedreals (l1 ++ (r :: l2))).
+Lemma insert_into_sorted (r : R) (l : seq R) :
+  sortedreals l ->
+  exists (l1 l2 : seq R), l = l1 ++ l2 /\ sortedreals (l1 ++ r :: l2).
 Proof.
+elim: l=>/= [|h t IH] S; first by exists [::], [::].
 intros S.
 induction l as [| h t IH].
 - exists nil. exists nil. by [].
@@ -657,6 +632,7 @@ induction l as [| h t IH].
     apply permEl. apply (perm_catC l1 l2). }
   apply (perm_trans T). apply permEl. apply perm_catC.
 Qed.
+*)
 
 (*We define what it means to be a full list of eigenvalues, and a sorted list of eigenvalues,
 for a matrix. Note that this definition will hold only if M is diagonalizable. Since we are
@@ -669,7 +645,7 @@ Definition eiglist {n : nat} (l : seq R) (M : 'M[R]_n) : Prop :=
   exists (U : 'M[R]_n), orthmx U /\ M = U^T *m diag_mx (vectorize l) *m U.
 
 Definition sortedeiglist {n : nat} (l : seq R) (M : 'M[R]_n) : Prop :=
-  exists (l' : seq R), perm_eq l l' /\ sortedreals l /\ eiglist l' M.
+  sorted (<=%R) l /\ exists (l' : seq R), perm_eq l l' /\ eiglist l' M.
 
 (*Towards stating the min-max theorem:*)
 (* We define what it means to have the max/min
@@ -686,20 +662,24 @@ orthogonal. *)
 maximum/minimum Rayleigh quotient relative to
 a subspace.*)
 Definition maxRay {k n : nat} (M : 'M[R]_n) (r : R) (U : 'M[R]_(k,n)) : Prop :=
-  (exists (v : 'rV_n), (is_normalR v /\ (v <= U)%MS /\ (v *m M *m v^T) 0 0 = r)) /\
-  forall (v : 'rV_n), (is_normalR v /\ (v <= U)%MS) -> (v *m M *m v^T) 0 0 <= r.
+  (exists (v : 'rV_n), [/\ is_normalR v, (v <= U)%MS & (v *m M *m v^T) 0 0 = r]) /\
+  forall (v : 'rV_n), is_normalR v -> (v <= U)%MS -> (v *m M *m v^T) 0 0 <= r.
+
 Definition minRay {k n : nat} (M : 'M[R]_n) (r : R) (U : 'M[R]_(k,n)) : Prop :=
-  (exists (v : 'rV_n), (is_normalR v /\ (v <= U)%MS /\ (v *m M *m v^T) 0 0 = r)) /\
-  forall (v : 'rV_n), (is_normalR v /\ (v <= U)%MS) -> (v *m M *m v^T) 0 0 >= r.
+  (exists (v : 'rV_n), [/\ is_normalR v, (v <= U)%MS & (v *m M *m v^T) 0 0 = r]) /\
+  forall (v : 'rV_n), is_normalR v -> (v <= U)%MS -> r <= (v *m M *m v^T) 0 0.
+
 (*Now we define what it means to be kth min-max and max-min.*)
 Definition minmax {n : nat} (k : nat) (M : 'M[R]_n) (r : R) : Prop :=
-  (exists (U : 'M[R]_(k,n)), (orthvecs U /\ maxRay M r U)) /\
-  forall (U : 'M[R]_(k,n)), forall (r' : R), (orthvecs U /\ maxRay M r' U) -> r <= r'.
+  (exists (U : 'M[R]_(k,n)), orthvecs U /\ maxRay M r U) /\
+  forall (U : 'M[R]_(k,n)) (r' : R), orthvecs U -> maxRay M r' U -> r <= r'.
 Definition maxmin {n : nat} (k : nat) (M : 'M[R]_n) (r : R) : Prop :=
-  (exists (U : 'M[R]_(k,n)), (orthvecs U /\ minRay M r U)) /\
-  forall (U : 'M[R]_(k,n)), forall (r' : R), (orthvecs U /\ minRay M r' U) -> r >= r'.
-Theorem MinMax {n : nat} (M : 'M[R]_n) : symmx M -> forall (k : nat),
-  (k > 0)%N -> (k <= n)%N -> forall (r : R), minmax k M r <-> maxmin (n+1-k) M r.
+  (exists (U : 'M[R]_(k,n)), orthvecs U /\ minRay M r U) /\
+  forall (U : 'M[R]_(k,n)) (r' : R), orthvecs U -> minRay M r' U -> r >= r'.
+Theorem MinMax {n : nat} (M : 'M[R]_n) :
+  symmx M ->
+  forall (k : nat),
+  (0 < k <= n)%N -> forall (r : R), minmax k M r <-> maxmin (n.+1-k) M r.
 Admitted.
 
 (* We do not here make the connection to eigenvalues explicit,
@@ -708,94 +688,70 @@ but minmax k M r expresses that r is the kth eigenvalue of M. *)
 (* One helper lemma about conjugations of symmetric matrices: *)
 Lemma symmx_conj {m n : nat} (U : 'M[R]_(m,n)) (M : 'M[R]_n) : symmx M -> symmx (U *m M *m U^T).
 Proof.
-intros S. unfold symmx. rewrite trmx_mul. rewrite trmxK. rewrite trmx_mul.
-rewrite mulmxA. rewrite <- S. reflexivity.
+by move=>S; rewrite /symmx !trmx_mul trmxK mulmxA -S.
 Qed.
 
 (* We now state the Cauchy interlacing theorem. *)
 Theorem CIT {m n : nat} (M : 'M[R]_m) (N : 'M[R]_n) : symmx N -> (m < n)%N ->
   (exists (P : 'M[R]_(m,n)), (orthvecs P /\ M = P *m N *m P^T)) ->
-  forall (k : nat), (k > 0)%N -> (k <= m)%N -> forall (r r' r'' : R),
-  minmax k M r -> minmax k N r' -> minmax (k+n-m) N r'' -> (r' <= r /\ r <= r'').
+  forall (k : nat), (0 < k <= m)%N -> forall (r r' r'' : R),
+  minmax k M r -> minmax k N r' -> minmax (k+n-m) N r'' -> r' <= r <= r''.
 Proof.
-intros S Hmn EP k Hk0 Hkm r r' r'' ErM Er'N Er''N. destruct EP as [P HP]. destruct HP as [HO HP].
-split.
+move=>S Hmn [P][HO HP] k Hk0m r r' r'' ErM Er'N Er''N.
+apply/andP; split.
 - (* The left side does not require the MinMax Theorem and can be proven based on the
   definition of minmax. *)
-  destruct ErM as [ErM1 ErM2]. destruct Er'N as [Er'N1 Er'N2].
-  destruct ErM1 as [UM HUM]. destruct Er'N1 as [UN HUN].
-  destruct HUM as [HUMO HUM]. destruct HUN as [HUNO HUN].
-  apply (Er'N2 (UM *m P) r).
-  split. apply (orthvecs_mul HUMO HO).
-  destruct HUM as [HUM1 HUM2]. destruct HUM1 as [v Hv]. destruct Hv as [Hv1 Hv].
-  destruct Hv as [Hv2 Hv3].
+  case: ErM => ErM1 ErM2; case: Er'N => Er'N1 Er'N2.
+  case: ErM1 =>UM [HUMO][[v][Hv1 Hv2 Hv3] HUM2]; case: Er'N1 => UN [HUNO HUN].
+  apply: (Er'N2 (UM *m P)); first by apply: orthvecs_mul.
   split.
   - (* The eigenvector of M also gives the maximal Rayleigh quotient for UM * P. *)
-    exists (v *m P). split.
-    - (*is normal:*) unfold is_normalR. unfold normsqR. rewrite trmx_mul.
-      rewrite <- mulmxA. rewrite (mulmxA P P^T v^T). rewrite HO mul1mx. apply Hv1. split.
-    - (*is in subspace:*) apply (submxMr P Hv2).
-    - (*r is Rayleigh quotient:*) rewrite trmx_mul. rewrite <- mulmxA. rewrite <- mulmxA.
-      rewrite (mulmxA N P^T v^T). rewrite (mulmxA P (N *m P^T) v^T). rewrite (mulmxA P N P^T).
-      rewrite <- HP. rewrite mulmxA. apply Hv3.
-  - (* Confirming it is indeed maximal, i.e., any other vector gives a smaller Rayleigh quotient. *)
-    intros v'. intros Hv'. destruct Hv' as [Hv'1 Hv'2].
-    assert (Ew : exists (w : 'rV[R]_k), v' = w *m (UM *m P)). { apply: submxP. apply Hv'2. }
-    destruct Ew as [w Ew]. rewrite mulmxA in Ew. rewrite !Ew. rewrite trmx_mul.
-    rewrite <- mulmxA. rewrite <- mulmxA. rewrite (mulmxA P N (P^T *m (w*m UM)^T)).
-    rewrite (mulmxA (P *m N) P^T (w *m UM)^T). rewrite <- HP. rewrite mulmxA.
-    apply HUM2. split.
-    - (* The vector w *m UM (v' in m dimensions) is normal *)
-      unfold is_normalR. unfold normsqR. rewrite trmx_mul.
-      rewrite <- (mulmx1 (w *m UM)). rewrite <- HO.
-      rewrite (mulmxA (w *m UM) P P^T). rewrite <- mulmxA.
-      rewrite <- trmx_mul.
-      assert (t : P^T *m (w *m UM)^T = (w *m UM *m P)^T). {rewrite (trmx_mul (w*m UM) P) //. }
-      rewrite t. rewrite <- !Ew. apply Hv'1.
-    - (* The vector w *m UM is in the subspace UM. *) apply submxMl.
-- (* The right side proceeds similarly but requires the minmax theorem to transform
+    exists (v *m P); split.
+    - (*is normal:*)
+      by rewrite /is_normalR /normsqR trmx_mul -mulmxA (mulmxA P) HO mul1mx.
+    - (*is in subspace:*)
+      by apply: submxMr.
+    (*r is Rayleigh quotient:*)
+    by rewrite trmx_mul -!mulmxA (mulmxA N) !(mulmxA P) -HP mulmxA.
+  (* Confirming it is indeed maximal, i.e., any other vector gives a smaller Rayleigh quotient. *)
+  move=>v' Hv'1; case/submxP=>w; rewrite mulmxA=>Ew.
+  rewrite Ew trmx_mul -!mulmxA (mulmxA N) !(mulmxA P) -HP !mulmxA.
+  apply: HUM2; (* The vector w *m UM is in the subspace UM. *)
+    last by apply: submxMl.
+  (* The vector w *m UM (v' in m dimensions) is normal *)
+  rewrite /is_normalR /normsqR trmx_mul -(mulmx1 (w *m UM)) -HO -trmx_mul -!mulmxA.
+  by rewrite -(trmx_mul (w*m UM)) 2!mulmxA -!Ew.
+(* The right side proceeds similarly but requires the minmax theorem to transform
   both minmax statements into maxmin statments. *)
-  rewrite HP in ErM.
-  rewrite (MinMax (symmx_conj P S) Hk0 Hkm) in ErM.
-  assert (t : (k + n - m <= n)%N). { rewrite leq_subLR leq_add2r //. }
-  assert (t' : (k + n -m > 0)%N). { rewrite subn_gt0. apply (ltn_addl k Hmn). }
-  rewrite (MinMax S t' t) in Er''N.
-  assert (Hmnk : (m <= n + k)%N). { apply (@leq_trans n m (n+k)%N). apply (ltnW Hmn). apply leq_addr. }
-  assert (t'' : (m + 1 - k = n + 1 - (k + n - m))%N). {
-    rewrite (addnC n 1%N) (addnC k n). rewrite (subnBA (1 + n)%N Hmnk). rewrite subnDA.
-    assert (T : (n <= 1 + n)%N). { by []. }
-    rewrite <- (addnBAC m T). rewrite <- (subnBA 1%N (leqnn n)). rewrite subnn.
-    rewrite subn0 (addnC 1%N m) //. }
-  rewrite <- t'' in Er''N. rewrite <- HP in ErM. (*With this prepared we proceed as the left side.*)
-  destruct ErM as [ErM1 ErM2]. destruct Er''N as [Er''N1 Er''N2].
-  destruct ErM1 as [UM HUM]. destruct Er''N1 as [UN HUN].
-  destruct HUM as [HUMO HUM]. destruct HUN as [HUNO HUN].
-  apply (Er''N2 (UM *m P) r).
-  split. apply (orthvecs_mul HUMO HO).
-  destruct HUM as [HUM1 HUM2]. destruct HUM1 as [v Hv]. destruct Hv as [Hv1 Hv].
-  destruct Hv as [Hv2 Hv3].
-  split.
-  - (* The eigenvector of M also gives the minimal Rayleigh quotient for UM * P. *)
-    exists (v *m P). split.
-    - (*is normal:*) unfold is_normalR. unfold normsqR. rewrite trmx_mul.
-      rewrite <- mulmxA. rewrite (mulmxA P P^T v^T). rewrite HO mul1mx. apply Hv1. split.
-    - (*is in subspace:*) apply (submxMr P Hv2).
-    - (*r is Rayleigh quotient:*) rewrite trmx_mul. rewrite <- mulmxA. rewrite <- mulmxA.
-      rewrite (mulmxA N P^T v^T). rewrite (mulmxA P (N *m P^T) v^T). rewrite (mulmxA P N P^T).
-      rewrite <- HP. rewrite mulmxA. apply Hv3.
-  - (* Confirming it is indeed minimal, i.e., any other vector gives a smaller Rayleigh quotient. *)
-    intros v'. intros Hv'. destruct Hv' as [Hv'1 Hv'2].
-    assert (Ew : exists (w : 'rV[R]_(m+1-k)), v' = w *m (UM *m P)). { apply: submxP. apply Hv'2. }
-    destruct Ew as [w Ew]. rewrite mulmxA in Ew. rewrite !Ew. rewrite trmx_mul.
-    rewrite <- mulmxA. rewrite <- mulmxA. rewrite (mulmxA P N (P^T *m (w*m UM)^T)).
-    rewrite (mulmxA (P *m N) P^T (w *m UM)^T). rewrite <- HP. rewrite mulmxA.
-    apply HUM2. split.
-    - (* The vector w *m UM (v' in m dimensions) is normal *)
-      unfold is_normalR. unfold normsqR. rewrite trmx_mul.
-      rewrite <- (mulmx1 (w *m UM)). rewrite <- HO.
-      rewrite (mulmxA (w *m UM) P P^T). rewrite <- mulmxA.
-      rewrite <- trmx_mul.
-      assert (T : P^T *m (w *m UM)^T = (w *m UM *m P)^T). {rewrite (trmx_mul (w*m UM) P) //. }
-      rewrite T. rewrite <- !Ew. apply Hv'1.
-    - (* The vector w *m UM is in the subspace UM. *) apply submxMl.
+rewrite HP (MinMax (symmx_conj P S) Hk0m) in ErM.
+have t : (0 < k + n - m <= n)%N.
+- apply/andP; split.
+  - by rewrite subn_gt0; apply: ltn_addl.
+  by rewrite leq_subLR leq_add2r; case/andP: Hk0m.
+rewrite (MinMax S t) in Er''N.
+have Hmnk : (m <= n + k)%N by apply: (leq_trans (ltnW Hmn)); exact: leq_addr.
+have t'' : (m.+1 - k = n.+1 - (k + n - m))%N.
+- rewrite (addnC k) (subnBA n.+1)%N // subnDA.
+  by rewrite -(addnBAC m) // subSnn add1n.
+rewrite -t'' in Er''N; rewrite -HP in ErM. (*With this prepared we proceed as the left side.*)
+case: ErM => ErM1 ErM2; case: Er''N => Er''N1 Er''N2.
+case: ErM1 => UM [HUMO [[v][Hv1 Hv2 Hv3] HUM2]]; case: Er''N1 => UN [HUNO HUN].
+apply: (Er''N2 (UM *m P) r); first by apply: orthvecs_mul.
+split.
+- (* The eigenvector of M also gives the minimal Rayleigh quotient for UM * P. *)
+  exists (v *m P); split.
+  - (*is normal:*)
+    by rewrite /is_normalR /normsqR trmx_mul -mulmxA (mulmxA P) HO mul1mx.
+  - (*is in subspace:*)
+    by apply: submxMr.
+  (*r is Rayleigh quotient:*)
+  by rewrite trmx_mul -mulmxA -mulmxA (mulmxA N) (mulmxA P) (mulmxA P) -HP mulmxA.
+(* Confirming it is indeed minimal, i.e., any other vector gives a smaller Rayleigh quotient. *)
+move=>v' Hv'1; case/submxP=>w; rewrite mulmxA=>Ew.
+rewrite Ew trmx_mul -!mulmxA (mulmxA N) !(mulmxA P) -HP !mulmxA.
+apply: HUM2; (* The vector w *m UM is in the subspace UM. *)
+  last by apply: submxMl.
+(* The vector w *m UM (v' in m dimensions) is normal *)
+rewrite /is_normalR /normsqR trmx_mul -(mulmx1 (w *m UM)) -HO -trmx_mul -!mulmxA.
+by rewrite -(trmx_mul (w*m UM)) 2!mulmxA -!Ew.
 Qed.
